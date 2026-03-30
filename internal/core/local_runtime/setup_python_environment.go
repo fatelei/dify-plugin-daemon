@@ -85,18 +85,19 @@ func (p *LocalPluginRuntime) preparePipArgs() []string {
 		args = append(args, "-vvv")
 	}
 
-	if p.appConfig.PipExtraArgs != "" {
-		extraArgs := strings.Split(p.appConfig.PipExtraArgs, " ")
-		args = append(args, extraArgs...)
-	}
+	args = append(args, p.parseExtraArgs()...)
 
 	args = append([]string{"pip"}, args...)
 
 	return args
 }
 
-func (p *LocalPluginRuntime) prepareSyncArgs() []string {
+func (p *LocalPluginRuntime) prepareSyncArgs(hasUvLock bool) []string {
 	args := []string{"sync", "--no-dev"}
+
+	if hasUvLock {
+		args = append(args, "--frozen")
+	}
 
 	if p.appConfig.PipMirrorUrl != "" {
 		args = append(args, "-i", p.appConfig.PipMirrorUrl)
@@ -106,16 +107,36 @@ func (p *LocalPluginRuntime) prepareSyncArgs() []string {
 		args = append(args, "-v")
 	}
 
-	if p.appConfig.PipExtraArgs != "" {
-		extraArgs := strings.Split(p.appConfig.PipExtraArgs, " ")
-		args = append(args, extraArgs...)
+	extraArgs := p.parseExtraArgs()
+	if hasUvLock {
+		extraArgs = p.deduplicateArgs(extraArgs, "--frozen")
 	}
-
-	if p.isManuallyUploaded() {
-		args = append(args, "--offline")
-	}
+	args = append(args, extraArgs...)
 
 	return args
+}
+
+func (p *LocalPluginRuntime) parseExtraArgs() []string {
+	if p.appConfig.PipExtraArgs == "" {
+		return nil
+	}
+	var result []string
+	for _, arg := range strings.Split(p.appConfig.PipExtraArgs, " ") {
+		if arg != "" {
+			result = append(result, arg)
+		}
+	}
+	return result
+}
+
+func (p *LocalPluginRuntime) deduplicateArgs(args []string, exclude string) []string {
+	var result []string
+	for _, arg := range args {
+		if arg != exclude {
+			result = append(result, arg)
+		}
+	}
+	return result
 }
 
 func (p *LocalPluginRuntime) detectDependencyFileType() (PythonDependencyFileType, error) {
@@ -147,12 +168,18 @@ func (p *LocalPluginRuntime) installDependencies(
 	var args []string
 	switch dependencyFileType {
 	case pyprojectTomlFile:
-		args = p.prepareSyncArgs()
+		uvLockPath := path.Join(p.State.WorkingPath, "uv.lock")
+		hasUvLock := false
+		if _, err := os.Stat(uvLockPath); err == nil {
+			hasUvLock = true
+		}
+		args = p.prepareSyncArgs(hasUvLock)
 		parent.SetAttributes(
 			attribute.String("python.install.method", "uv sync"),
 			attribute.String("python.install.file", string(pyprojectTomlFile)),
+			attribute.Bool("python.install.frozen", hasUvLock),
 		)
-		log.Info("installing plugin dependencies", "plugin", p.Config.Identity(), "method", "uv sync", "file", pyprojectTomlFile)
+		log.Info("installing plugin dependencies", "plugin", p.Config.Identity(), "method", "uv sync", "file", pyprojectTomlFile, "frozen", hasUvLock)
 	case requirementsTxtFile:
 		args = p.preparePipArgs()
 		parent.SetAttributes(
@@ -163,6 +190,8 @@ func (p *LocalPluginRuntime) installDependencies(
 	default:
 		return fmt.Errorf("unsupported dependency file type: %s", dependencyFileType)
 	}
+
+	log.Info("uv command", "cmd", uvPath, "args", args)
 
 	virtualEnvPath := path.Join(p.State.WorkingPath, ".venv")
 	uvCacheDir := path.Join(p.State.WorkingPath, ".uv-cache")
