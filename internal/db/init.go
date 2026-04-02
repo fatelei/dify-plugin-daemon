@@ -102,10 +102,10 @@ func Init(config *app.Config) {
 		log.Panic("failed to init dify plugin db", "error", err)
 	}
 
-	err = autoMigrate()
-	if err != nil {
-		log.Panic("failed to auto migrate", "error", err)
-	}
+	// err = autoMigrate()
+	// if err != nil {
+	//	log.Panic("failed to auto migrate", "error", err)
+	// }
 
 	log.Info("dify plugin db initialized")
 }
