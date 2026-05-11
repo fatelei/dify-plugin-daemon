@@ -230,10 +230,10 @@ func (p *PluginManager) ExtractPluginAsset(
 		return nil, err
 	}
 	zipDecoder, err := decoder.NewZipPluginDecoder(pkgBytes)
-	defer zipDecoder.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer zipDecoder.Close()
 	assets, err := zipDecoder.Assets()
 	if err != nil {
 		return nil, err

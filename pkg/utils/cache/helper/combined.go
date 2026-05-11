@@ -167,7 +167,10 @@ func CombinedGetPluginDeclaration(
 					db.Equal("install_type", string(plugin_entities.PLUGIN_RUNTIME_TYPE_REMOTE)),
 				)
 				if err != nil {
-					return nil, ErrPluginNotFound
+					if errors.Is(err, db.ErrDatabaseNotFound) {
+						return nil, ErrPluginNotFound
+					}
+					return nil, err
 				}
 
 				return &plugin.RemoteDeclaration, nil
