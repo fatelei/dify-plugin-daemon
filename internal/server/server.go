@@ -8,6 +8,7 @@ import (
 	"github.com/langgenius/dify-plugin-daemon/internal/core/persistence"
 	"github.com/langgenius/dify-plugin-daemon/internal/core/plugin_manager"
 	"github.com/langgenius/dify-plugin-daemon/internal/db"
+	"github.com/langgenius/dify-plugin-daemon/internal/storage/baidubos"
 	"github.com/langgenius/dify-plugin-daemon/internal/tasks"
 	"github.com/langgenius/dify-plugin-daemon/internal/types/app"
 	"github.com/langgenius/dify-plugin-daemon/pkg/utils/cache"
@@ -19,6 +20,22 @@ func initOSS(config *app.Config) oss.OSS {
 	// init storage
 	var storage oss.OSS
 	var err error
+
+	// baidu bos is implemented locally, not in dify-cloud-kit
+	if config.PluginStorageType == baidubos.OSS_TYPE_BAIDU_BOS {
+		storage, err = baidubos.NewBaiduBOSStorage(baidubos.BaiduBOSConfig{
+			Endpoint:  config.BaiduBOSEndpoint,
+			AccessKey: config.BaiduBOSAccessKey,
+			SecretKey: config.BaiduBOSSecretKey,
+			Region:    config.BaiduBOSRegion,
+			Bucket:    config.PluginStorageOSSBucket,
+		})
+		if err != nil {
+			log.Panic("failed to create baidu bos storage", "error", err)
+		}
+		return storage
+	}
+
 	storage, err = factory.Load(config.PluginStorageType, oss.OSSArgs{
 		Local: &oss.Local{
 			Path: config.PluginStorageLocalRoot,
