@@ -88,6 +88,12 @@ type Config struct {
 	VolcengineTOSSecretKey string `envconfig:"VOLCENGINE_TOS_SECRET_KEY"`
 	VolcengineTOSRegion    string `envconfig:"VOLCENGINE_TOS_REGION"`
 
+	// baidu bos
+	BaiduBOSEndpoint  string `envconfig:"BAIDU_BOS_ENDPOINT"`
+	BaiduBOSAccessKey string `envconfig:"BAIDU_BOS_ACCESS_KEY"`
+	BaiduBOSSecretKey string `envconfig:"BAIDU_BOS_SECRET_KEY"`
+	BaiduBOSRegion    string `envconfig:"BAIDU_BOS_REGION"`
+
 	// local
 	PluginStorageLocalRoot string `envconfig:"PLUGIN_STORAGE_LOCAL_ROOT"`
 
