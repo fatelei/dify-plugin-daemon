@@ -186,6 +186,30 @@ func TestUploadPluginPkgStillAllowsUnsignedPackageWhenVerificationNotRequired(t 
 	require.Equal(t, 0, manifestResp.Code)
 }
 
+func TestUploadPluginPkgRejectsSameVersionDifferentChecksum(t *testing.T) {
+	env := setupUploadTestEnv(t, false)
+	firstPkg := unsignedPluginPackageWithAsset(t, "sameversion", `<svg xmlns="http://www.w3.org/2000/svg"><text>one</text></svg>`)
+	secondPkg := unsignedPluginPackageWithAsset(t, "sameversion", `<svg xmlns="http://www.w3.org/2000/svg"><text>two</text></svg>`)
+	firstIdentifier := packageIdentifier(t, firstPkg)
+	secondIdentifier := packageIdentifier(t, secondPkg)
+	require.Equal(t, firstIdentifier.PluginID(), secondIdentifier.PluginID())
+	require.Equal(t, firstIdentifier.Version(), secondIdentifier.Version())
+	require.NotEqual(t, firstIdentifier.Checksum(), secondIdentifier.Checksum())
+
+	firstResp := UploadPluginPkg(env.config, nil, "tenant-1", testMultipartFile{bytes.NewReader(firstPkg)}, false)
+	require.Equal(t, 0, firstResp.Code)
+
+	secondResp := UploadPluginPkg(env.config, nil, "tenant-1", testMultipartFile{bytes.NewReader(secondPkg)}, false)
+	require.Equal(t, -400, secondResp.Code)
+	require.Contains(t, secondResp.Message, "already exists with a different checksum")
+	require.Contains(t, secondResp.Message, "please bump version")
+
+	storedPackage, err := env.manager.GetPackage(firstIdentifier)
+	require.NoError(t, err)
+	require.Equal(t, firstPkg, storedPackage)
+	requireNoUploadArtifacts(t, env, secondIdentifier)
+}
+
 func requireNoUploadArtifacts(t *testing.T, env uploadTestEnv, identifiers ...plugin_entities.PluginUniqueIdentifier) {
 	t.Helper()
 
@@ -222,11 +246,17 @@ func signedPluginPackage(t *testing.T, name string) []byte {
 func unsignedPluginPackage(t *testing.T, name string) []byte {
 	t.Helper()
 
+	return unsignedPluginPackageWithAsset(t, name, `<svg xmlns="http://www.w3.org/2000/svg"></svg>`)
+}
+
+func unsignedPluginPackageWithAsset(t *testing.T, name string, asset string) []byte {
+	t.Helper()
+
 	var buf bytes.Buffer
 	zipWriter := zip.NewWriter(&buf)
 	writeZipFile(t, zipWriter, "manifest.yaml", pluginManifest(name))
 	writeZipFile(t, zipWriter, "endpoint.yaml", endpointManifest())
-	writeZipFile(t, zipWriter, "_assets/test.svg", `<svg xmlns="http://www.w3.org/2000/svg"></svg>`)
+	writeZipFile(t, zipWriter, "_assets/test.svg", asset)
 	require.NoError(t, zipWriter.Close())
 	return buf.Bytes()
 }

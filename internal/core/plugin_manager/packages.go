@@ -84,6 +84,10 @@ func (p *PluginManager) PersistPackage(
 	prepared.previousPackage = nil
 	prepared.declarationCreated = false
 
+	if err := rejectConflictingPackageVersion(prepared.UniqueIdentifier); err != nil {
+		return nil, err
+	}
+
 	packageExists, err := p.packageBucket.Exists(prepared.UniqueIdentifier.String())
 	if err != nil {
 		return nil, err
@@ -147,6 +151,32 @@ func (p *PluginManager) PersistPackage(
 
 	prepared.Declaration = declaration
 	return &prepared.Declaration, nil
+}
+
+func rejectConflictingPackageVersion(identifier plugin_entities.PluginUniqueIdentifier) error {
+	declarations, err := db.GetAll[models.PluginDeclaration](
+		db.Equal("plugin_id", identifier.PluginID()),
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, declaration := range declarations {
+		existingIdentifier, err := plugin_entities.NewPluginUniqueIdentifier(declaration.PluginUniqueIdentifier)
+		if err != nil {
+			return err
+		}
+		if existingIdentifier.Version() == identifier.Version() && existingIdentifier.Checksum() != identifier.Checksum() {
+			return fmt.Errorf(
+				"plugin %s version %s already exists with a different checksum (%s); please bump version before uploading a changed package",
+				identifier.PluginID(),
+				identifier.Version(),
+				existingIdentifier.Checksum(),
+			)
+		}
+	}
+
+	return nil
 }
 
 func (p *PluginManager) SavePackage(
